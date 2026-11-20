@@ -1,29 +1,53 @@
+
 import pandas as pd
 
-df = pd.read_csv("data/raw/nav_history.csv")
-
-print("Shape:", df.shape)
-print("\nMissing values:")
-print(df.isnull().sum())
-
-print("\nDuplicate records:", df.duplicated().sum())
-
-print("\nFund-wise records:")
-print(df.groupby("fund_name").size())
+# Load datasets
+nav = pd.read_csv("data/raw/nav_history.csv")
 master = pd.read_csv("data/raw/fund_master.csv")
 
-print("\nFund master scheme codes:")
-print(master.columns.tolist())
-master = pd.read_csv("data/raw/fund_master.csv")
+# 1. Basic NAV inspection
+print("NAV Dataset Shape:", nav.shape)
 
-master_codes = set(master["amfi_code"].astype(str))
-nav_codes = set(df["scheme_code"].astype(str))
+print("\nMissing Values:")
+print(nav.isnull().sum())
+
+print("\nDuplicate Rows:", nav.duplicated().sum())
+
+# 2. Fund-wise NAV record count
+print("\nFund-wise NAV Records:")
+print(nav.groupby("amfi_code").size())
+
+# 3. Validate AMFI scheme codes
+master_codes = set(
+    pd.to_numeric(master["amfi_code"], errors="coerce")
+    .dropna().astype("int64")
+)
+
+nav_codes = set(
+    pd.to_numeric(nav["amfi_code"], errors="coerce")
+    .dropna().astype("int64")
+)
 
 missing_codes = master_codes - nav_codes
+extra_codes = nav_codes - master_codes
 
-print("\nFund master codes:", len(master_codes))
-print("NAV scheme codes:", len(nav_codes))
-print("Missing NAV codes:", missing_codes)
+print("\n========== AMFI CODE VALIDATION ==========")
 
-if not missing_codes:
-    print("All fund master codes exist in NAV history.")
+print("Fund Master Codes:", len(master_codes))
+print("NAV Scheme Codes:", len(nav_codes))
+
+print("\nMissing NAV Codes:", missing_codes)
+print("Extra NAV Codes:", extra_codes)
+
+# 4. Check duplicate scheme-date combinations
+duplicate_dates = nav.duplicated(
+    subset=["amfi_code", "date"]
+).sum()
+
+print("\nDuplicate Scheme-Date Records:", duplicate_dates)
+
+# 5. Final result
+if not missing_codes and not extra_codes:
+    print("\nSUCCESS: All AMFI codes match!")
+else:
+    print("\nWARNING: AMFI code mismatches found.")
