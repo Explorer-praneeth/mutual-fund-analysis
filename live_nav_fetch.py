@@ -1,47 +1,40 @@
-
 import requests
 import pandas as pd
 from pathlib import Path
 
-# Mutual fund scheme codes
-SCHEMES = {
-    "HDFC Top 100": 125497,
-    "SBI Bluechip": 119551,
-    "ICICI Bluechip": 120503,
-    "Nippon Large Cap": 118632,
-    "Axis Bluechip": 119092,
-    "Kotak Bluechip": 120841
-}
-
-output_dir = Path("data/raw")
-output_dir.mkdir(parents=True, exist_ok=True)
+master = pd.read_csv("data/raw/fund_master.csv")
 
 all_nav_data = []
+failed_codes = []
 
-for fund_name, scheme_code in SCHEMES.items():
-    url = f"https://api.mfapi.in/mf/{scheme_code}"
+for _, row in master.iterrows():
+    code = str(row["amfi_code"]).replace(".0", "")
 
-    response = requests.get(url, timeout=30)
-    response.raise_for_status()
+    try:
+        url = f"https://api.mfapi.in/mf/{code}"
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
 
-    result = response.json()
+        result = response.json()
+        df = pd.DataFrame(result["data"])
 
-    df = pd.DataFrame(result["data"])
-    df["scheme_code"] = scheme_code
-    df["fund_name"] = fund_name
+        if df.empty:
+            failed_codes.append(code)
+            continue
 
-    all_nav_data.append(df)
+        df["scheme_code"] = code
+        df["fund_name"] = row["scheme_name"]
 
-    print(f"{fund_name}: {len(df)} NAV records fetched")
+        all_nav_data.append(df)
+        print(f"Fetched: {row['scheme_name']}")
 
-# Combine all funds
-nav_history = pd.concat(all_nav_data, ignore_index=True)
+    except Exception as e:
+        failed_codes.append(code)
+        print(f"Failed: {code} - {e}")
 
-# Save raw NAV data
-nav_history.to_csv(
-    output_dir / "nav_history.csv",
-    index=False
-)
+if all_nav_data:
+    nav_history = pd.concat(all_nav_data, ignore_index=True)
+    nav_history.to_csv("data/raw/nav_history.csv", index=False)
 
-print("\nCombined NAV shape:", nav_history.shape)
-print(nav_history.head())
+print("\nTotal schemes fetched:", len(all_nav_data))
+print("Failed scheme codes:", failed_codes)
